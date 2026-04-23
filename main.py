@@ -48,6 +48,15 @@ RARITY_COINS = {
     "mythic": (300, 600),
 }
 
+RARITY_EMOJI = {
+    "common": "⚪",
+    "uncommon": "🟢",
+    "rare": "🔵",
+    "epic": "🟣",
+    "legendary": "🟡",
+    "mythic": "🔴",
+}
+
 # ---------------- STATE ----------------
 
 user_inv_page = {}
@@ -95,18 +104,17 @@ async def start(msg: Message):
     get_user(msg.from_user.id)
     await msg.answer("👤 профиль создан", reply_markup=menu)
 
-# ---------------- PROFILE (RICH) ----------------
+# ---------------- PROFILE (QUOTE STYLE) ----------------
 
 @dp.message(F.text == "👤 профиль")
 async def profile(msg: Message):
     u = get_user(msg.from_user.id)
     active = cards.get(u.get("active_card"))
 
-    text = f"""
+    base = f"""
 👤 Профиль
 
 🆔 ID: {msg.from_user.id}
-
 💎 Премиум • {'Да' if u['premium'] else 'Нет'}
 
 🪙 Баланс • {u['coins']}
@@ -115,22 +123,21 @@ async def profile(msg: Message):
 """
 
     if active:
-        text = f"""⭐ АКТИВНАЯ КАРТОЧКА
+        emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
 
-🎴 {active['name']}
-⭐ {active['rarity']}
+        text = f"""
+> 🔥 АКТИВНАЯ КАРТОЧКА
+> {emoji} {active['name']}
 
-────────────────
-
-{text}
+{base}
 """
-
-        if active["file_id"]:
-            await msg.answer_photo(active["file_id"], caption=text)
-        else:
-            await msg.answer(text)
     else:
-        await msg.answer(text + "\n🎴 Активная: нет")
+        text = base + "\n> 🎴 Активная: нет"
+
+    if active and active["file_id"]:
+        await msg.answer_photo(active["file_id"], caption=text)
+    else:
+        await msg.answer(text)
 
 # ---------------- BONUS ----------------
 
@@ -147,7 +154,7 @@ async def bonus(msg: Message):
 
     await msg.answer(f"🎁 +{reward} 🪙")
 
-# ---------------- CARD GACHA ----------------
+# ---------------- CARD ----------------
 
 def roll_rarity():
     r = random.uniform(0, 100)
@@ -179,13 +186,14 @@ async def card(msg: Message):
     if not u["active_card"]:
         u["active_card"] = card_id
 
+    emoji = RARITY_EMOJI.get(rarity, "⚪")
+
     text = f"""
 🎴 НОВАЯ КАРТА
 
-🎴 {card['name']}
-⭐ {rarity}
+{emoji} {card['name']}
 
-💰 +{coins}
+💰 +{coins} 🪙
 🧩 +1
 """
 
@@ -199,10 +207,12 @@ async def card(msg: Message):
 def get_cards_by_rarity(uid, rarity):
     u = get_user(uid)
     res = []
+
     for cid in u["cards"]:
         c = cards.get(cid)
         if c and c["rarity"] == rarity:
             res.append({"id": cid, **c})
+
     return res
 
 @dp.message(F.text == "🎒 инвентарь")
@@ -243,16 +253,18 @@ async def show_inventory(call: CallbackQuery):
     page_items = items[start:end]
 
     active = cards.get(u.get("active_card"))
+    emoji_active = RARITY_EMOJI.get(active["rarity"], "⚪") if active else None
 
     text = f"🎒 {rarity.upper()}\n\n"
 
     if active:
-        text += f"⭐ АКТИВНАЯ: {active['name']}\n\n"
+        text += f"> 🔥 АКТИВНАЯ\n> {emoji_active} {active['name']}\n\n"
 
     kb = []
 
     for i, c in enumerate(page_items, 1):
-        text += f"{i}️⃣ {c['name']}\n"
+        emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
+        text += f"{i}️⃣ {emoji} {c['name']}\n"
         kb.append([InlineKeyboardButton(text=f"{i}️⃣", callback_data=f"card_{c['id']}")])
 
     nav = []
@@ -290,16 +302,16 @@ async def select(c: CallbackQuery):
     selected_card_inv[c.from_user.id] = cid
 
     card = cards[cid]
+    emoji = RARITY_EMOJI.get(card["rarity"], "⚪")
 
     text = f"""
 🎴 КАРТА
 
-🎴 {card['name']}
-⭐ {card['rarity']}
+{emoji} {card['name']}
 """
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ сделать активной", callback_data="set_active")]
+        [InlineKeyboardButton(text="⭐ активировать", callback_data="set_active")]
     ])
 
     if card["file_id"]:
@@ -320,12 +332,12 @@ async def set_active(c: CallbackQuery):
 
 @dp.message(F.text == "🏆 топ")
 async def top(msg: Message):
-    top_bal = sorted(users.items(), key=lambda x: x[1]["coins"], reverse=True)[:10]
+    top_list = sorted(users.items(), key=lambda x: x[1]["coins"], reverse=True)[:10]
 
     text = "🏆 ТОП\n\n🪙 Баланс:\n"
 
-    for i, (uid, u) in enumerate(top_bal, 1):
-        text += f"{i}. {uid} - {u['coins']}\n"
+    for i, (uid, u) in enumerate(top_list, 1):
+        text += f"{i}. {uid} - {u['coins']} 🪙\n"
 
     await msg.answer(text)
 
@@ -341,11 +353,11 @@ async def admin(msg: Message, state: FSMContext):
         for cid, c in cards.items()
     ])
 
-    await msg.answer("выбери", reply_markup=kb)
+    await msg.answer("выбери карточку", reply_markup=kb)
     await state.set_state(AdminState.choosing_card)
 
 @dp.callback_query(F.data.startswith("adm_"))
-async def adm_select(c: CallbackQuery, state: FSMContext):
+async def adm(c: CallbackQuery, state: FSMContext):
     cid = int(c.data.split("_")[1])
     selected_admin_card[c.from_user.id] = cid
     await state.set_state(AdminState.waiting_photo)
