@@ -9,14 +9,25 @@ from config import BOT_TOKEN
 from db import connect, create_tables
 
 # handlers
-from handlers import profile, card, inventory, help, market, bonus, tree, water
+from handlers import (
+    profile,
+    card,
+    inventory,
+    market,
+    bonus,
+    tree,
+    water,
+    help_handler
+)
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# регистрация хендлеров
+# =========================
+# 📌 HANDLERS
+# =========================
 dp.include_router(profile.router)
 dp.include_router(card.router)
 dp.include_router(inventory.router)
@@ -24,8 +35,7 @@ dp.include_router(market.router)
 dp.include_router(bonus.router)
 dp.include_router(tree.router)
 dp.include_router(water.router)
-dp.include_router(help.router)
-
+dp.include_router(help_handler.router)
 
 # =========================
 # 💬 START (ЛС)
@@ -36,14 +46,17 @@ async def start(message: Message):
         keyboard=[
             [KeyboardButton(text="📁 Профиль"), KeyboardButton(text="🎴 Карта")],
             [KeyboardButton(text="📦 Карты"), KeyboardButton(text="🌳 Дерево")],
-            [KeyboardButton(text="🔄 Рынок"), KeyboardButton(text="❓ Помощь")]
+            [KeyboardButton(text="🔄 Рынок"), KeyboardButton(text="🎁 Бонус")],
+            [KeyboardButton(text="💧 Полить"), KeyboardButton(text="❓ Помощь")]
         ],
         resize_keyboard=True
     )
 
     await message.answer("👋 Добро пожаловать в CardBot!", reply_markup=kb)
 
-
+# =========================
+# 🚀 MAIN
+# =========================
 async def main():
     print("🚀 BOT STARTING...")
 
