@@ -1,13 +1,18 @@
 import asyncpg
 from config import DATABASE_URL
 
-pool: asyncpg.Pool | None = None
+pool = None
 
 
 async def connect():
     global pool
     pool = await asyncpg.create_pool(DATABASE_URL)
-    print("✅ DB POOL CREATED")
+
+
+async def get_connection():
+    if pool is None:
+        raise Exception("DB not initialized yet (pool is None)")
+    return pool.acquire()
 
 
 async def create_tables():
@@ -25,19 +30,9 @@ async def create_tables():
         """)
 
 
-async def get_user(user_id: int):
+async def get_user(user_id):
     async with pool.acquire() as conn:
-        user = await conn.fetchrow(
+        return await conn.fetchrow(
             "SELECT * FROM users WHERE user_id=$1",
             user_id
         )
-        return user
-
-
-async def create_user(user_id: int):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-        INSERT INTO users(user_id)
-        VALUES($1)
-        ON CONFLICT DO NOTHING
-        """, user_id)
