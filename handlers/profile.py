@@ -4,11 +4,11 @@ from db import get_user
 
 router = Router()
 
-@router.message(lambda msg: msg.text.lower() in ["профиль", "/profile"])
-async def profile_cmd(message: Message):
+@router.message(lambda m: m.text and m.text.lower().strip() in ["профиль", "/profile", "📁 профиль"])
+async def profile(message: Message):
     user = await get_user(message.from_user.id)
 
-    text = f"""
+    await message.answer(f"""
 👤 Профиль
 
 🆔 ID: {message.from_user.id}
@@ -19,5 +19,4 @@ async def profile_cmd(message: Message):
 🧩 Фрагменты • {user['fragments']}
 
 🌳 Дерево • {user['tree']} см
-"""
-    await message.answer(text)
+""")
