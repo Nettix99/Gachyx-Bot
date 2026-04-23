@@ -14,7 +14,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # =========================
-# 🧠 MEMORY STORAGE (ВРЕМЕННО)
+# 🧠 MEMORY STORAGE
 # =========================
 USERS = {}
 
@@ -37,10 +37,17 @@ CARDS = [
 ]
 
 
+# =========================
+# 👤 USER SYSTEM
+# =========================
 def get_user(user_id: int):
     if user_id not in USERS:
         USERS[user_id] = {
-            "cards": []
+            "balance": 0,
+            "cards": [],
+            "fragments": 0,
+            "tree": 120,
+            "active": None
         }
     return USERS[user_id]
 
@@ -50,6 +57,8 @@ def get_user(user_id: int):
 # =========================
 @dp.message(CommandStart())
 async def start(message: Message):
+    get_user(message.from_user.id)
+
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Профиль"), KeyboardButton(text="🎴 Карта")],
@@ -58,22 +67,7 @@ async def start(message: Message):
         resize_keyboard=True
     )
 
-    get_user(message.from_user.id)
-
     await message.answer("👋 Добро пожаловать в CardBot!", reply_markup=kb)
-
-
-# =========================
-# 👤 ПРОФИЛЬ
-# =========================
-@dp.message(lambda m: m.text and m.text.lower() in ["профиль", "📁 профиль"])
-async def profile(message: Message):
-    user = get_user(message.from_user.id)
-
-    await message.answer(
-        f"👤 Профиль\n\n"
-        f"🎴 Карты: {len(user['cards'])}"
-    )
 
 
 # =========================
@@ -108,6 +102,53 @@ async def inventory(message: Message):
 
     for c in user["cards"][-10:]:
         text += f"{c['rarity']} — {c['name']}\n"
+
+    await message.answer(text)
+
+
+# =========================
+# 👤 ПРОФИЛЬ (ПОЛНЫЙ)
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() in ["профиль", "📁 профиль"])
+async def profile(message: Message):
+    user = get_user(message.from_user.id)
+    cards = user["cards"]
+
+    rarity_count = {
+        "⚪": 0,
+        "🟢": 0,
+        "🔵": 0,
+        "🟣": 0,
+        "🟡": 0
+    }
+
+    for c in cards:
+        rarity_count[c["rarity"]] += 1
+
+    text = f"""
+👤 Профиль
+
+🆔 ID: {message.from_user.id}
+
+💎 Премиум • Нет
+
+Активная:
+🔵 {user["active"] if user["active"] else "Нет"}
+
+Баланс • {user["balance"]} 🪙
+Карточки • {len(cards)} 🎴
+Фрагменты • {user["fragments"]} 🧩
+
+🌳 Дерево • {user["tree"]} см
+
+Топ:
+🪙 Баланс • #-
+🎴 Карточки • #-
+🌳 Дерево • #-
+
+Коллекция:
+🎴 {len(cards)}  ⚪ {rarity_count["⚪"]}  🟢 {rarity_count["🟢"]}  🔵 {rarity_count["🔵"]}  🟣 {rarity_count["🟣"]}  🟡 {rarity_count["🟡"]}
+"""
 
     await message.answer(text)
 
