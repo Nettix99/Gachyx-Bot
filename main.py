@@ -20,7 +20,7 @@ ADMINS = [8200958216]
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ---------------- DATABASE ----------------
+# ---------------- DATA ----------------
 
 users = {}
 
@@ -61,20 +61,10 @@ RARITY_COINS = {
     "mythic": (300, 600),
 }
 
-RARITY_ORDER = [
-    "common",
-    "uncommon",
-    "rare",
-    "epic",
-    "legendary",
-    "mythic"
-]
-
 # ---------------- STATE ----------------
 
-catalog_page = {}
+view_index = {}
 selected_admin_card = {}
-selected_card_inv = {}
 
 class AdminState(StatesGroup):
     waiting_photo = State()
@@ -86,7 +76,7 @@ menu = ReplyKeyboardMarkup(
         [KeyboardButton(text="👤 профиль"), KeyboardButton(text="🎒 инвентарь")],
         [KeyboardButton(text="🎴 карта"), KeyboardButton(text="🎁 бонус")],
         [KeyboardButton(text="👁 просмотр"), KeyboardButton(text="🏆 топ")],
-        [KeyboardButton(text="🎴 коллекция"), KeyboardButton(text="🛠 админ")],
+        [KeyboardButton(text="🛠 админ")],
     ],
     resize_keyboard=True
 )
@@ -99,7 +89,6 @@ def get_user(uid):
             "coins": 100,
             "cards": [],
             "fragments": 0,
-            "premium": False,
             "active_card": None,
             "cooldowns": {"card": 0, "bonus": 0}
         }
@@ -122,7 +111,6 @@ async def profile(msg: Message):
     base = (
         f"👤 Профиль\n"
         f"🆔 ID: {msg.from_user.id}\n"
-        f"💎 Премиум • {'Да' if u['premium'] else 'Нет'}\n"
         f"🪙 Баланс • {u['coins']}\n"
         f"🧩 Фрагменты • {u['fragments']}\n"
         f"🎴 Карточек • {len(u['cards'])}"
@@ -198,74 +186,61 @@ async def card(msg: Message):
 # ---------------- VIEW ----------------
 
 @dp.message(F.text == "👁 просмотр")
-async def view(msg: Message):
-    u = get_user(msg.from_user.id)
-    active = cards.get(u.get("active_card"))
+async def view_start(msg: Message):
+    view_index[msg.from_user.id] = 0
+    await show_view(msg)
 
-    if not active:
-        return await msg.answer("нет активной карты")
-
-    emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
-    text = f"👁 ВИТРИНА\n\n{emoji} {active['name']}"
-
-    if active["file_id"]:
-        await msg.answer_photo(active["file_id"], caption=text)
-    else:
-        await msg.answer(text)
-
-# ---------------- COLLECTION (CATALOG SLIDER) ----------------
-
-@dp.message(F.text == "🎴 коллекция")
-async def collection(msg: Message):
-    catalog_page[msg.from_user.id] = 0
-    await show_catalog(msg)
-
-async def show_catalog(event):
+async def show_view(event):
     uid = event.from_user.id
-    page = catalog_page.get(uid, 0)
+    index = view_index.get(uid, 0)
 
     all_cards = list(cards.items())
-    all_cards.sort(key=lambda x: RARITY_ORDER.index(x[1]["rarity"]))
 
-    if page < 0:
-        page = 0
-    if page >= len(all_cards):
-        page = len(all_cards) - 1
+    if not all_cards:
+        return await event.answer("нет карточек")
 
-    catalog_page[uid] = page
+    if index < 0:
+        index = 0
+    if index >= len(all_cards):
+        index = len(all_cards) - 1
 
-    cid, card = all_cards[page]
+    view_index[uid] = index
 
-    emoji = RARITY_EMOJI.get(card["rarity"], "⚪")
+    cid, c = all_cards[index]
 
-    text = f"🎴 ВИТРИНА\n\n{emoji} {card['name']}"
+    emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
 
-    kb = []
+    text = f"""
+🎴 КАРТОЧКА
+
+{emoji} {c['name']}
+
+📝 редкость: {c['rarity']}
+"""
 
     nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️", callback_data="cat_prev"))
-    if page < len(all_cards) - 1:
-        nav.append(InlineKeyboardButton(text="➡️", callback_data="cat_next"))
 
-    kb.append(nav)
+    if index > 0:
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data="view_prev"))
+    if index < len(all_cards) - 1:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data="view_next"))
 
-    markup = InlineKeyboardMarkup(inline_keyboard=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=[nav])
 
-    if card["file_id"]:
-        await event.answer_photo(card["file_id"], caption=text, reply_markup=markup)
+    if c["file_id"]:
+        await event.answer_photo(c["file_id"], caption=text, reply_markup=kb)
     else:
-        await event.answer(text, reply_markup=markup)
+        await event.answer(text, reply_markup=kb)
 
-@dp.callback_query(F.data == "cat_next")
-async def next_c(c: CallbackQuery):
-    catalog_page[c.from_user.id] = catalog_page.get(c.from_user.id, 0) + 1
-    await show_catalog(c.message)
+@dp.callback_query(F.data == "view_next")
+async def next_card(c: CallbackQuery):
+    view_index[c.from_user.id] = view_index.get(c.from_user.id, 0) + 1
+    await show_view(c.message)
 
-@dp.callback_query(F.data == "cat_prev")
-async def prev_c(c: CallbackQuery):
-    catalog_page[c.from_user.id] = max(0, catalog_page.get(c.from_user.id, 0) - 1)
-    await show_catalog(c.message)
+@dp.callback_query(F.data == "view_prev")
+async def prev_card(c: CallbackQuery):
+    view_index[c.from_user.id] = max(0, view_index.get(c.from_user.id, 0) - 1)
+    await show_view(c.message)
 
 # ---------------- TOP ----------------
 
