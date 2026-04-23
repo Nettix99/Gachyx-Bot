@@ -1,23 +1,12 @@
 import asyncio
 import logging
+import random
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 
 from config import BOT_TOKEN
-from db import connect, create_tables
-
-from handlers import (
-    profile,
-    card,
-    inventory,
-    market,
-    bonus,
-    tree,
-    water,
-    help_handler
-)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,16 +14,36 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # =========================
-# 📦 HANDLERS
+# 🧠 MEMORY STORAGE (ВРЕМЕННО)
 # =========================
-dp.include_router(profile.router)
-dp.include_router(card.router)
-dp.include_router(inventory.router)
-dp.include_router(market.router)
-dp.include_router(bonus.router)
-dp.include_router(tree.router)
-dp.include_router(water.router)
-dp.include_router(help_handler.router)
+USERS = {}
+
+CARDS = [
+    {"name": "Саконжи Урокодаки", "rarity": "⚪"},
+    {"name": "Мурата", "rarity": "⚪"},
+    {"name": "Аои Канзаки", "rarity": "⚪"},
+    {"name": "Канао Цуюри", "rarity": "🟢"},
+    {"name": "Генъя Шинадзугава", "rarity": "🟢"},
+    {"name": "Тамайо", "rarity": "🟢"},
+    {"name": "Юширо", "rarity": "🟢"},
+    {"name": "Зеницу Агацума", "rarity": "🔵"},
+    {"name": "Иноске Хашибира", "rarity": "🔵"},
+    {"name": "Синобу Кочо", "rarity": "🔵"},
+    {"name": "Гию Томиока", "rarity": "🔵"},
+    {"name": "Кёджуро Ренгоку", "rarity": "🟣"},
+    {"name": "Тэнген Узуи", "rarity": "🟣"},
+    {"name": "Музан Кибуцуджи", "rarity": "🟣"},
+    {"name": "Тандзиро Камадо", "rarity": "🟡"},
+]
+
+
+def get_user(user_id: int):
+    if user_id not in USERS:
+        USERS[user_id] = {
+            "cards": []
+        }
+    return USERS[user_id]
+
 
 # =========================
 # 💬 START
@@ -44,27 +53,83 @@ async def start(message: Message):
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Профиль"), KeyboardButton(text="🎴 Карта")],
-            [KeyboardButton(text="📦 Карты"), KeyboardButton(text="🌳 Дерево")],
-            [KeyboardButton(text="🔄 Рынок"), KeyboardButton(text="🎁 Бонус")],
-            [KeyboardButton(text="💧 Полить"), KeyboardButton(text="❓ Помощь")]
+            [KeyboardButton(text="📦 Карты"), KeyboardButton(text="❓ Помощь")]
         ],
         resize_keyboard=True
     )
 
-    await message.answer("👋 Добро пожаловать!", reply_markup=kb)
+    get_user(message.from_user.id)
+
+    await message.answer("👋 Добро пожаловать в CardBot!", reply_markup=kb)
+
+
+# =========================
+# 👤 ПРОФИЛЬ
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() in ["профиль", "📁 профиль"])
+async def profile(message: Message):
+    user = get_user(message.from_user.id)
+
+    await message.answer(
+        f"👤 Профиль\n\n"
+        f"🎴 Карты: {len(user['cards'])}"
+    )
+
+
+# =========================
+# 🎴 ВЫДАЧА КАРТЫ
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() in ["карта", "🎴 карта"])
+async def card(message: Message):
+    user = get_user(message.from_user.id)
+
+    card = random.choice(CARDS)
+    user["cards"].append(card)
+
+    await message.answer(
+        f"🎴 Ты получил карту!\n\n"
+        f"🏷 {card['name']}\n"
+        f"⭐ {card['rarity']}"
+    )
+
+
+# =========================
+# 📦 ИНВЕНТАРЬ
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() in ["карты", "📦 карты"])
+async def inventory(message: Message):
+    user = get_user(message.from_user.id)
+
+    if not user["cards"]:
+        await message.answer("📦 У тебя нет карт")
+        return
+
+    text = "📦 Твои карты:\n\n"
+
+    for c in user["cards"][-10:]:
+        text += f"{c['rarity']} — {c['name']}\n"
+
+    await message.answer(text)
+
+
+# =========================
+# ❓ ПОМОЩЬ
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() in ["помощь", "❓ помощь"])
+async def help_cmd(message: Message):
+    await message.answer(
+        "📖 Команды:\n\n"
+        "📁 профиль\n"
+        "🎴 карта\n"
+        "📦 карты"
+    )
+
 
 # =========================
 # 🚀 START BOT
 # =========================
 async def main():
     print("🚀 BOT STARTING...")
-
-    if not BOT_TOKEN:
-        print("❌ BOT_TOKEN EMPTY")
-        return
-
-    await connect()          # 🔴 ВАЖНО: СНАЧАЛА DB
-    await create_tables()    # 🔴 ПОТОМ ТАБЛИЦЫ
 
     await bot.delete_webhook(drop_pending_updates=True)
 
