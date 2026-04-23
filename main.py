@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import random
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 
@@ -14,27 +13,22 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # =========================
-# 🧠 MEMORY STORAGE
+# ⚙️ CONFIG
+# =========================
+ADMIN_ID = 8200958216  # 👈 ЗАМЕНИ НА СВОЙ ID
+LOG_CHAT_ID = -1003774664852  # 👈 ID группы логов
+
+# =========================
+# 🧠 MEMORY
 # =========================
 USERS = {}
 
-CARDS = [
-    {"name": "Саконжи Урокодаки", "rarity": "⚪"},
-    {"name": "Мурата", "rarity": "⚪"},
-    {"name": "Аои Канзаки", "rarity": "⚪"},
-    {"name": "Канао Цуюри", "rarity": "🟢"},
-    {"name": "Генъя Шинадзугава", "rarity": "🟢"},
-    {"name": "Тамайо", "rarity": "🟢"},
-    {"name": "Юширо", "rarity": "🟢"},
-    {"name": "Зеницу Агацума", "rarity": "🔵"},
-    {"name": "Иноске Хашибира", "rarity": "🔵"},
-    {"name": "Синобу Кочо", "rarity": "🔵"},
-    {"name": "Гию Томиока", "rarity": "🔵"},
-    {"name": "Кёджуро Ренгоку", "rarity": "🟣"},
-    {"name": "Тэнген Узуи", "rarity": "🟣"},
-    {"name": "Музан Кибуцуджи", "rarity": "🟣"},
-    {"name": "Тандзиро Камадо", "rarity": "🟡"},
-]
+CARD = {
+    "id": 1,
+    "name": "Тандзиро Камадо",
+    "rarity": "🟡",
+    "photo_id": None
+}
 
 
 # =========================
@@ -43,11 +37,7 @@ CARDS = [
 def get_user(user_id: int):
     if user_id not in USERS:
         USERS[user_id] = {
-            "balance": 0,
-            "cards": [],
-            "fragments": 0,
-            "tree": 120,
-            "active": None
+            "cards": []
         }
     return USERS[user_id]
 
@@ -67,24 +57,31 @@ async def start(message: Message):
         resize_keyboard=True
     )
 
-    await message.answer("👋 Добро пожаловать в CardBot!", reply_markup=kb)
+    await message.answer("👋 CardBot запущен", reply_markup=kb)
 
 
 # =========================
 # 🎴 ВЫДАЧА КАРТЫ
 # =========================
 @dp.message(lambda m: m.text and m.text.lower() in ["карта", "🎴 карта"])
-async def card(message: Message):
+async def give_card(message: Message):
     user = get_user(message.from_user.id)
 
-    card = random.choice(CARDS)
-    user["cards"].append(card)
+    user["cards"].append(CARD["id"])
 
-    await message.answer(
-        f"🎴 Ты получил карту!\n\n"
-        f"🏷 {card['name']}\n"
-        f"⭐ {card['rarity']}"
+    text = (
+        f"🎴 Карта получена!\n\n"
+        f"🏷 {CARD['name']}\n"
+        f"⭐ {CARD['rarity']}"
     )
+
+    if CARD["photo_id"]:
+        await message.answer_photo(
+            CARD["photo_id"],
+            caption=text
+        )
+    else:
+        await message.answer(text)
 
 
 # =========================
@@ -94,67 +91,72 @@ async def card(message: Message):
 async def inventory(message: Message):
     user = get_user(message.from_user.id)
 
-    if not user["cards"]:
-        await message.answer("📦 У тебя нет карт")
-        return
-
-    text = "📦 Твои карты:\n\n"
-
-    for c in user["cards"][-10:]:
-        text += f"{c['rarity']} — {c['name']}\n"
-
-    await message.answer(text)
+    await message.answer(f"📦 У тебя {len(user['cards'])} карт(ы)")
 
 
 # =========================
-# 👤 ПРОФИЛЬ (ПОЛНЫЙ)
+# 👤 ПРОФИЛЬ
 # =========================
 @dp.message(lambda m: m.text and m.text.lower() in ["профиль", "📁 профиль"])
 async def profile(message: Message):
     user = get_user(message.from_user.id)
-    cards = user["cards"]
 
-    rarity_count = {
-        "⚪": 0,
-        "🟢": 0,
-        "🔵": 0,
-        "🟣": 0,
-        "🟡": 0
-    }
-
-    for c in cards:
-        rarity_count[c["rarity"]] += 1
-
-    text = f"""
+    await message.answer(
+        f"""
 👤 Профиль
 
 🆔 ID: {message.from_user.id}
 
-💎 Премиум • Нет
-
-Активная:
-🔵 {user["active"] if user["active"] else "Нет"}
-
-Баланс • {user["balance"]} 🪙
-Карточки • {len(cards)} 🎴
-Фрагменты • {user["fragments"]} 🧩
-
-🌳 Дерево • {user["tree"]} см
-
-Топ:
-🪙 Баланс • #-
-🎴 Карточки • #-
-🌳 Дерево • #-
-
-Коллекция:
-🎴 {len(cards)}  ⚪ {rarity_count["⚪"]}  🟢 {rarity_count["🟢"]}  🔵 {rarity_count["🔵"]}  🟣 {rarity_count["🟣"]}  🟡 {rarity_count["🟡"]}
+🎴 Карты: {len(user['cards'])}
 """
-
-    await message.answer(text)
+    )
 
 
 # =========================
-# ❓ ПОМОЩЬ
+# 🛠 АДМИН
+# =========================
+@dp.message(lambda m: m.text and m.text.lower() == "админ")
+async def admin(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return await message.answer("⛔ Нет доступа")
+
+    await message.answer(
+        "🛠 Админ режим\n\n"
+        "📸 Отправь фото в чат боту\n"
+        "➡ оно станет картой"
+    )
+
+
+# =========================
+# 📸 ПРИЁМ ФОТО (АДМИН)
+# =========================
+@dp.message(F.photo)
+async def handle_photo(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    photo = message.photo[-1]
+    file_id = photo.file_id
+
+    CARD["photo_id"] = file_id
+
+    # лог в группу
+    await bot.send_photo(
+        LOG_CHAT_ID,
+        photo=file_id,
+        caption=(
+            f"🖼 Новая карта загружена\n\n"
+            f"🎴 {CARD['name']}\n"
+            f"⭐ {CARD['rarity']}\n"
+            f"🆔 file_id:\n{file_id}"
+        )
+    )
+
+    await message.answer("✅ Фото сохранено и отправлено в логи")
+
+
+# =========================
+# ❓ HELP
 # =========================
 @dp.message(lambda m: m.text and m.text.lower() in ["помощь", "❓ помощь"])
 async def help_cmd(message: Message):
@@ -162,7 +164,8 @@ async def help_cmd(message: Message):
         "📖 Команды:\n\n"
         "📁 профиль\n"
         "🎴 карта\n"
-        "📦 карты"
+        "📦 карты\n"
+        "админ"
     )
 
 
