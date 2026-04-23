@@ -1,325 +1,189 @@
 import asyncio
-import logging
-
+import random
+import time
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 
-from config import BOT_TOKEN
+TOKEN = "8783833879:AAGu7m564GaYTjcA6NGV4IS7UpHMVUieoO8"
+ADMINS = [8200958216]
 
-logging.basicConfig(level=logging.INFO)
-
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# ------------------ ДАННЫЕ ------------------
 
-# =========================
-# ⚙️ CONFIG
-# =========================
-
-ADMIN_ID = 8200958216
-LOG_CHAT_ID = -1003774664852
-
-
-# =========================
-# 🧠 MEMORY
-# =========================
-
-USERS = {}
-
-# 3 тестовые карточки
-CARDS = {
-    1: {
-        "name": "Тандзиро Камадо",
-        "rarity": "🟡",
-        "photo_id": None
-    },
-    2: {
-        "name": "Наруто Узумаки",
-        "rarity": "🔵",
-        "photo_id": None
-    },
-    3: {
-        "name": "Леви Аккерман",
-        "rarity": "🟣",
-        "photo_id": None
-    }
+users = {}
+cards = {
+    1: {"name": "Саконжи Урокодаки", "rarity": "common", "file_id": None},
+    2: {"name": "Канао Цуюри", "rarity": "uncommon", "file_id": None},
+    3: {"name": "Синобу Кочо", "rarity": "rare", "file_id": None},
 }
 
+RARITY_CHANCE = [
+    ("common", 58),
+    ("uncommon", 25),
+    ("rare", 12),
+    ("epic", 4),
+    ("legendary", 0.9),
+    ("mythic", 0.1),
+]
 
-# =========================
-# TEMP ADMIN STATE
-# =========================
-
-admin_state = {
-    "edit_card_id": None
+RARITY_COINS = {
+    "common": (10, 20),
+    "uncommon": (20, 40),
+    "rare": (40, 80),
+    "epic": (80, 150),
+    "legendary": (150, 300),
+    "mythic": (300, 600),
 }
 
+# ------------------ UI ------------------
 
-# =========================
-# USER
-# =========================
+menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="👤 профиль")],
+        [KeyboardButton(text="🎒 инвентарь")],
+        [KeyboardButton(text="🎴 карта")],
+        [KeyboardButton(text="🎁 бонус")],
+    ],
+    resize_keyboard=True
+)
 
-def get_user(user_id: int):
-    if user_id not in USERS:
-        USERS[user_id] = {
-            "cards": [1, 2],
-            "active_card": 1,
-            "balance": 0,
+# ------------------ UTIL ------------------
+
+def get_user(uid):
+    if uid not in users:
+        users[uid] = {
+            "coins": 100,
+            "cards": [],
             "fragments": 0,
-            "tree": 120,
-            "premium": True
+            "active": None,
+            "cooldowns": {"card": 0, "bonus": 0}
         }
-    return USERS[user_id]
+    return users[uid]
 
+def roll_rarity():
+    r = random.uniform(0, 100)
+    s = 0
+    for name, chance in RARITY_CHANCE:
+        s += chance
+        if r <= s:
+            return name
+    return "common"
 
-# =========================
-# START
-# =========================
+def get_card_by_rarity(rarity):
+    pool = [c for c in cards.values() if c["rarity"] == rarity]
+    return random.choice(pool) if pool else None
 
-@dp.message(CommandStart())
-async def start(message: Message):
-    get_user(message.from_user.id)
+# ------------------ START ------------------
 
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="📁 Профиль"),
-                KeyboardButton(text="🎴 Карта")
-            ],
-            [
-                KeyboardButton(text="📦 Инвентарь"),
-                KeyboardButton(text="❓ Помощь")
-            ]
-        ],
-        resize_keyboard=True
-    )
+@dp.message(F.text == "/start")
+async def start(msg: Message):
+    get_user(msg.from_user.id)
+    await msg.answer("👤 профиль создан", reply_markup=menu_kb)
 
-    await message.answer(
-        "👋 CardBot запущен",
-        reply_markup=kb
-    )
+# ------------------ PROFILE ------------------
 
+@dp.message(F.text == "👤 профиль")
+async def profile(msg: Message):
+    u = get_user(msg.from_user.id)
+    await msg.answer(
+        f"""👤 Профиль
 
-# =========================
-# 📁 ПРОФИЛЬ
-# =========================
-
-@dp.message(lambda m: m.text and m.text.lower() in ["профиль", "📁 профиль"])
-async def profile(message: Message):
-    user = get_user(message.from_user.id)
-    active = CARDS[user["active_card"]]
-
-    text = f"""
-👤 Профиль
-
-🆔 ID • {message.from_user.id}
-
-🎴 Активная карточка: {active['name']}
-⭐ Редкость • {active['rarity']}
-🆔 ID карты • {user['active_card']}
-
-💰 Баланс • {user['balance']} 🪙
-📦 Карточки • {len(user['cards'])} 🎴
+🪙 {u['coins']}
+🎴 {len(u['cards'])}
+🧩 {u['fragments']}
 """
-
-    if active["photo_id"]:
-        await message.answer_photo(
-            photo=active["photo_id"],
-            caption=text
-        )
-    else:
-        await message.answer(text)
-
-
-# =========================
-# 📦 ИНВЕНТАРЬ
-# =========================
-
-@dp.message(lambda m: m.text and m.text.lower() in ["инвентарь", "📦 инвентарь"])
-async def inventory(message: Message):
-    user = get_user(message.from_user.id)
-
-    text = "📦 Инвентарь:\n\n"
-
-    for cid in user["cards"]:
-        card = CARDS[cid]
-        active_mark = " ✅ АКТИВНА" if cid == user["active_card"] else ""
-
-        text += (
-            f"🎴 ID: {cid}\n"
-            f"🏷 {card['name']}\n"
-            f"⭐ {card['rarity']}{active_mark}\n"
-            f"➡ Напиши: выбрать {cid}\n\n"
-        )
-
-    await message.answer(text)
-
-
-# =========================
-# 🎯 УСТАНОВКА АКТИВНОЙ КАРТЫ
-# =========================
-
-@dp.message(lambda m: m.text and m.text.lower().startswith("выбрать"))
-async def set_active(message: Message):
-    user = get_user(message.from_user.id)
-
-    try:
-        cid = int(message.text.split()[1])
-    except:
-        return await message.answer(
-            "❌ Используй: выбрать <id>"
-        )
-
-    if cid not in user["cards"]:
-        return await message.answer(
-            "❌ У тебя нет такой карты"
-        )
-
-    user["active_card"] = cid
-
-    await message.answer(
-        f"✅ Активная карточка установлена:\n\n"
-        f"{CARDS[cid]['name']}\n"
-        f"⭐ {CARDS[cid]['rarity']}"
     )
 
+# ------------------ BONUS ------------------
 
-# =========================
-# 🎴 ВЫДАТЬ ТЕСТОВУЮ КАРТУ
-# =========================
+@dp.message(F.text == "🎁 бонус")
+async def bonus(msg: Message):
+    u = get_user(msg.from_user.id)
+    now = time.time()
 
-@dp.message(lambda m: m.text and m.text.lower() in ["карта", "🎴 карта"])
-async def give_card(message: Message):
-    user = get_user(message.from_user.id)
+    if now < u["cooldowns"]["bonus"]:
+        return await msg.answer("⏳ бонус недоступен")
 
-    user["cards"].append(3)
+    reward = random.randint(50, 100)
+    u["coins"] += reward
+    u["cooldowns"]["bonus"] = now + 86400
 
-    await message.answer(
-        "🎴 Получена новая карта!\n\n"
-        "Леви Аккерман\n"
-        "⭐ 🟣"
-    )
+    await msg.answer(f"🎁 +{reward} 🪙")
 
+# ------------------ CARD ------------------
 
-# =========================
-# 🛠 АДМИН ПАНЕЛЬ
-# =========================
+@dp.message(F.text == "🎴 карта")
+async def card(msg: Message):
+    u = get_user(msg.from_user.id)
+    now = time.time()
 
-@dp.message(lambda m: m.text and m.text.lower() == "админ")
-async def admin_panel(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        return await message.answer("⛔ Нет доступа")
+    if now < u["cooldowns"]["card"]:
+        return await msg.answer("⏳ подожди 4 часа")
 
-    cards_text = "\n".join(
-        [
-            f"{cid} — {card['name']} {card['rarity']}"
-            for cid, card in CARDS.items()
-        ]
-    )
+    rarity = roll_rarity()
+    card = get_card_by_rarity(rarity)
 
-    await message.answer(
-        "🛠 Админ панель\n\n"
-        "Список карт:\n\n"
-        f"{cards_text}\n\n"
-        "Для изменения фото напиши:\n"
-        "редактировать <id>"
-    )
+    if not card:
+        return await msg.answer("нет карточек")
 
+    coins = random.randint(*RARITY_COINS[rarity])
 
-# =========================
-# 🎯 ВЫБОР КАРТЫ ДЛЯ РЕДАКТИРОВАНИЯ
-# =========================
+    u["cards"].append(card["name"])
+    u["fragments"] += 1
+    u["coins"] += coins
+    u["cooldowns"]["card"] = now + 14400
 
-@dp.message(lambda m: m.text and m.text.lower().startswith("редактировать"))
-async def edit_card(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    text = f"""🎴 карта
 
-    try:
-        cid = int(message.text.split()[1])
-    except:
-        return await message.answer(
-            "❌ Используй: редактировать <id>"
-        )
+{card['name']}
+редкость: {rarity}
 
-    if cid not in CARDS:
-        return await message.answer(
-            "❌ Такой карты не существует"
-        )
++1 🧩
++{coins} 🪙"""
 
-    admin_state["edit_card_id"] = cid
+    await msg.answer(text)
 
-    await message.answer(
-        f"📸 Отправь новое фото для карты:\n\n"
-        f"{CARDS[cid]['name']}\n"
-        f"⭐ {CARDS[cid]['rarity']}"
-    )
+# ------------------ INVENTORY ------------------
 
+@dp.message(F.text == "🎒 инвентарь")
+async def inv(msg: Message):
+    u = get_user(msg.from_user.id)
 
-# =========================
-# 📸 УСТАНОВКА ФОТО КАРТЫ
-# =========================
+    if not u["cards"]:
+        return await msg.answer("пусто")
+
+    text = "🎒 инвентарь\n\n"
+    for i, c in enumerate(u["cards"], 1):
+        text += f"{i}. {c}\n"
+
+    await msg.answer(text)
+
+# ------------------ ADMIN SET PHOTO ------------------
 
 @dp.message(F.photo)
-async def handle_photo(message: Message):
-    if message.from_user.id != ADMIN_ID:
+async def admin_photo(msg: Message):
+    if msg.from_user.id not in ADMINS:
         return
 
-    cid = admin_state.get("edit_card_id")
+    if not hasattr(msg, "reply_to_message") or not msg.reply_to_message:
+        return
 
-    if not cid:
-        return await message.answer(
-            "❌ Сначала выбери карту:\nредактировать <id>"
-        )
+    try:
+        card_id = int(msg.reply_to_message.text.split(":")[1])
+    except:
+        return
 
-    file_id = message.photo[-1].file_id
-    CARDS[cid]["photo_id"] = file_id
+    file_id = msg.photo[-1].file_id
+    cards[card_id]["file_id"] = file_id
 
-    await bot.send_photo(
-        chat_id=LOG_CHAT_ID,
-        photo=file_id,
-        caption=(
-            "🖼 Фото карточки обновлено\n\n"
-            f"ID: {cid}\n"
-            f"🏷 {CARDS[cid]['name']}\n"
-            f"⭐ {CARDS[cid]['rarity']}"
-        )
-    )
+    await msg.answer(f"готово: {cards[card_id]['name']}")
 
-    await message.answer(
-        "✅ Фото карточки успешно обновлено"
-    )
-
-    admin_state["edit_card_id"] = None
-
-
-# =========================
-# ❓ ПОМОЩЬ
-# =========================
-
-@dp.message(lambda m: m.text and m.text.lower() in ["помощь", "❓ помощь"])
-async def help_command(message: Message):
-    await message.answer(
-        "❓ Команды:\n\n"
-        "📁 Профиль — посмотреть профиль\n"
-        "📦 Инвентарь — список карт\n"
-        "🎴 Карта — получить тестовую карту\n"
-        "выбрать <id> — сделать карту активной\n\n"
-        "🛠 Для админа:\n"
-        "админ\n"
-        "редактировать <id>"
-    )
-
-
-# =========================
-# 🚀 START
-# =========================
+# ------------------ RUN ------------------
 
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
