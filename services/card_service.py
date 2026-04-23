@@ -1,4 +1,5 @@
 import random
+from database.queries import add_card, add_candies, add_fragments
 
 RARITIES = {
     "⚪": 50,
@@ -10,12 +11,12 @@ RARITIES = {
 }
 
 CARDS = {
-    "🔴": ["Кокушибо", "Музан", "Акадза"],
-    "🟡": ["Ренгоку", "Муичиро"],
-    "🟣": ["Незуко", "Тенген"],
-    "🔵": ["Гию", "Синобу"],
-    "🟢": ["Канао"],
-    "⚪": ["Мурата"]
+    "⚪": ["Саконжи Урокодаки"],
+    "🟢": ["Канао Цуюри"],
+    "🔵": ["Синобу Кочо"],
+    "🟣": ["Незуко Камадо", "Гию Томиока"],
+    "🟡": ["Танджиро"],
+    "🔴": ["Кокушибо"]
 }
 
 
@@ -28,7 +29,25 @@ def get_random_card(user_id):
 
     name = random.choice(CARDS[rarity])
 
+    # 💰 награда
+    rewards = {
+        "⚪": (10, 30),
+        "🟢": (30, 60),
+        "🔵": (60, 120),
+        "🟣": (120, 250),
+        "🟡": (250, 500),
+        "🔴": (500, 1000)
+    }
+
+    candies = random.randint(*rewards[rarity])
+
+    # 📦 сохраняем
+    add_card(user_id, name, rarity)
+    add_candies(user_id, candies)
+    add_fragments(user_id, 1)
+
     return {
         "rarity": rarity,
-        "name": name
+        "name": name,
+        "candies": candies
     }
