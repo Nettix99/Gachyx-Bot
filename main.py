@@ -103,37 +103,36 @@ async def start(msg: Message):
     get_user(msg.from_user.id)
     await msg.answer("👤 профиль создан", reply_markup=menu)
 
-# ---------------- PROFILE (CITATION FIXED) ----------------
+# ---------------- PROFILE (FIXED UI) ----------------
 
 @dp.message(F.text == "👤 профиль")
 async def profile(msg: Message):
     u = get_user(msg.from_user.id)
     active = cards.get(u.get("active_card"))
 
-    base = f"""
-👤 Профиль
-
-🆔 ID: {msg.from_user.id}
-💎 Премиум • {'Да' if u['premium'] else 'Нет'}
-
-🪙 Баланс • {u['coins']}
-🧩 Фрагменты • {u['fragments']}
-🎴 Карточек • {len(u['cards'])}
-"""
+    base = (
+        f"👤 Профиль\n"
+        f"🆔 ID: {msg.from_user.id}\n"
+        f"💎 Премиум • {'Да' if u['premium'] else 'Нет'}\n"
+        f"🪙 Баланс • {u['coins']}\n"
+        f"🧩 Фрагменты • {u['fragments']}\n"
+        f"🎴 Карточек • {len(u['cards'])}"
+    )
 
     if active:
         emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
 
-        text = f"""
-<blockquote>
-Активная карточка:
-{emoji} {active['name']}
-</blockquote>
-
-{base}
-"""
+        text = (
+            "🔥 АКТИВНАЯ КАРТОЧКА\n"
+            f"<blockquote>{emoji} {active['name']}</blockquote>\n\n"
+            f"{base}"
+        )
     else:
-        text = base + "\n<blockquote>Активная карточка: нет</blockquote>"
+        text = (
+            "🔥 АКТИВНАЯ КАРТОЧКА\n"
+            "<blockquote>нет</blockquote>\n\n"
+            f"{base}"
+        )
 
     if active and active["file_id"]:
         await msg.answer_photo(active["file_id"], caption=text, parse_mode="HTML")
@@ -189,14 +188,12 @@ async def card(msg: Message):
 
     emoji = RARITY_EMOJI.get(rarity, "⚪")
 
-    text = f"""
-🎴 НОВАЯ КАРТА
-
-{emoji} {card['name']}
-
-💰 +{coins} 🪙
-🧩 +1
-"""
+    text = (
+        "🎴 НОВАЯ КАРТА\n\n"
+        f"{emoji} {card['name']}\n\n"
+        f"💰 +{coins} 🪙\n"
+        f"🧩 +1"
+    )
 
     if card["file_id"]:
         await msg.answer_photo(card["file_id"], caption=text)
@@ -227,7 +224,6 @@ async def rarity(call: CallbackQuery):
     r = call.data.split("_")[1]
     user_inv_rarity[call.from_user.id] = r
     user_inv_page[call.from_user.id] = 0
-    await call.message.edit_text("загрузка...")
     await show_inventory(call)
 
 def get_cards_by_rarity(uid, rarity):
@@ -258,7 +254,7 @@ async def show_inventory(call: CallbackQuery):
 
     if active:
         emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
-        text += f"<blockquote>АКТИВНАЯ\n{emoji} {active['name']}</blockquote>\n\n"
+        text += f"🔥 АКТИВНАЯ\n<blockquote>{emoji} {active['name']}</blockquote>\n\n"
 
     kb = []
 
@@ -304,11 +300,7 @@ async def select(c: CallbackQuery):
     card = cards[cid]
     emoji = RARITY_EMOJI.get(card["rarity"], "⚪")
 
-    text = f"""
-🎴 КАРТА
-
-{emoji} {card['name']}
-"""
+    text = f"🎴 КАРТА\n\n{emoji} {card['name']}"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⭐ активировать", callback_data="set_active")]
