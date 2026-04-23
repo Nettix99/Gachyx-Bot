@@ -3,17 +3,15 @@ from aiogram.types import Message
 
 router = Router()
 
-@router.message(lambda msg: msg.text.lower() in ["помощь", "/help"])
+@router.message(lambda m: m.text and m.text.lower().strip() in ["помощь", "/help", "❓ помощь"])
 async def help_cmd(message: Message):
     await message.answer("""
 📖 Команды:
 
-профиль / profile
-карта / card
-карты / inventory
-рынок / market
-бонус / bonus
-дерево / tree
-полить / water
-топ / top
+📁 профиль
+🎴 карта
+📦 карты
+🔄 рынок
+🌳 дерево
+❓ помощь
 """)
