@@ -3,7 +3,6 @@ from database.db import cursor, conn
 
 def create_tables():
 
-    # 👤 Пользователи
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -14,7 +13,6 @@ def create_tables():
     )
     """)
 
-    # 🎴 Карточки пользователя
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS cards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +23,6 @@ def create_tables():
     )
     """)
 
-    # ⏱ Кулдауны
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS cooldowns (
         user_id INTEGER,
