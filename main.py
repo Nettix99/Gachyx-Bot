@@ -62,12 +62,11 @@ RARITY_EMOJI = {
 user_inv_page = {}
 user_inv_rarity = {}
 selected_card_inv = {}
+selected_admin_card = {}
 
 class AdminState(StatesGroup):
     choosing_card = State()
     waiting_photo = State()
-
-selected_admin_card = {}
 
 # ---------------- MENU ----------------
 
@@ -104,7 +103,7 @@ async def start(msg: Message):
     get_user(msg.from_user.id)
     await msg.answer("👤 профиль создан", reply_markup=menu)
 
-# ---------------- PROFILE (QUOTE STYLE) ----------------
+# ---------------- PROFILE (CITATION FIXED) ----------------
 
 @dp.message(F.text == "👤 профиль")
 async def profile(msg: Message):
@@ -126,18 +125,20 @@ async def profile(msg: Message):
         emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
 
         text = f"""
-> 🔥 АКТИВНАЯ КАРТОЧКА
-> {emoji} {active['name']}
+<blockquote>
+Активная карточка:
+{emoji} {active['name']}
+</blockquote>
 
 {base}
 """
     else:
-        text = base + "\n> 🎴 Активная: нет"
+        text = base + "\n<blockquote>Активная карточка: нет</blockquote>"
 
     if active and active["file_id"]:
-        await msg.answer_photo(active["file_id"], caption=text)
+        await msg.answer_photo(active["file_id"], caption=text, parse_mode="HTML")
     else:
-        await msg.answer(text)
+        await msg.answer(text, parse_mode="HTML")
 
 # ---------------- BONUS ----------------
 
@@ -154,7 +155,7 @@ async def bonus(msg: Message):
 
     await msg.answer(f"🎁 +{reward} 🪙")
 
-# ---------------- CARD ----------------
+# ---------------- CARD SYSTEM ----------------
 
 def roll_rarity():
     r = random.uniform(0, 100)
@@ -204,17 +205,6 @@ async def card(msg: Message):
 
 # ---------------- INVENTORY ----------------
 
-def get_cards_by_rarity(uid, rarity):
-    u = get_user(uid)
-    res = []
-
-    for cid in u["cards"]:
-        c = cards.get(cid)
-        if c and c["rarity"] == rarity:
-            res.append({"id": cid, **c})
-
-    return res
-
 @dp.message(F.text == "🎒 инвентарь")
 async def inventory(msg: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -237,7 +227,17 @@ async def rarity(call: CallbackQuery):
     r = call.data.split("_")[1]
     user_inv_rarity[call.from_user.id] = r
     user_inv_page[call.from_user.id] = 0
+    await call.message.edit_text("загрузка...")
     await show_inventory(call)
+
+def get_cards_by_rarity(uid, rarity):
+    u = get_user(uid)
+    res = []
+    for cid in u["cards"]:
+        c = cards.get(cid)
+        if c and c["rarity"] == rarity:
+            res.append({"id": cid, **c})
+    return res
 
 async def show_inventory(call: CallbackQuery):
     uid = call.from_user.id
@@ -253,12 +253,12 @@ async def show_inventory(call: CallbackQuery):
     page_items = items[start:end]
 
     active = cards.get(u.get("active_card"))
-    emoji_active = RARITY_EMOJI.get(active["rarity"], "⚪") if active else None
 
     text = f"🎒 {rarity.upper()}\n\n"
 
     if active:
-        text += f"> 🔥 АКТИВНАЯ\n> {emoji_active} {active['name']}\n\n"
+        emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
+        text += f"<blockquote>АКТИВНАЯ\n{emoji} {active['name']}</blockquote>\n\n"
 
     kb = []
 
@@ -278,7 +278,7 @@ async def show_inventory(call: CallbackQuery):
 
     kb.append(nav)
 
-    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await call.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data == "inv_next")
 async def nxt(c: CallbackQuery):
