@@ -1,4 +1,8 @@
-import os
+BOT_TOKEN = "8783833879:AAGu7m564GaYTjcA6NGV4IS7UpHMVUieoO8"
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATABASE_URL = os.getenv("DATABASE_URL")
+# канал для проверки подписки
+CHANNEL_ID = -1003715439816
+
+# кд (в секундах)
+CARD_COOLDOWN = 4 * 60 * 60
+BONUS_COOLDOWN = 24 * 60 * 60
