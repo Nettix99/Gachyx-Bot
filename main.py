@@ -20,7 +20,7 @@ ADMINS = [8200958216]
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ---------------- DATA ----------------
+# ---------------- DATABASE ----------------
 
 users = {}
 
@@ -34,6 +34,8 @@ cards = {
     7: {"name": "Кокушибо", "rarity": "mythic", "file_id": None},
 }
 
+RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"]
+
 RARITY_EMOJI = {
     "common": "⚪",
     "uncommon": "🟢",
@@ -41,24 +43,6 @@ RARITY_EMOJI = {
     "epic": "🟣",
     "legendary": "🟡",
     "mythic": "🔴",
-}
-
-RARITY_CHANCE = [
-    ("common", 58),
-    ("uncommon", 25),
-    ("rare", 12),
-    ("epic", 4),
-    ("legendary", 0.9),
-    ("mythic", 0.1),
-]
-
-RARITY_COINS = {
-    "common": (10, 20),
-    "uncommon": (20, 40),
-    "rare": (40, 80),
-    "epic": (80, 150),
-    "legendary": (150, 300),
-    "mythic": (300, 600),
 }
 
 # ---------------- STATE ----------------
@@ -108,24 +92,21 @@ async def profile(msg: Message):
     u = get_user(msg.from_user.id)
     active = cards.get(u.get("active_card"))
 
-    base = (
+    text = (
         f"👤 Профиль\n"
         f"🆔 ID: {msg.from_user.id}\n"
-        f"🪙 Баланс • {u['coins']}\n"
-        f"🧩 Фрагменты • {u['fragments']}\n"
-        f"🎴 Карточек • {len(u['cards'])}"
+        f"🪙 Баланс: {u['coins']}\n"
+        f"🧩 Фрагменты: {u['fragments']}\n"
+        f"🎴 Карточек: {len(u['cards'])}\n"
     )
 
     if active:
         emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
-        text = f"🔥 АКТИВНАЯ КАРТОЧКА\n<blockquote>{emoji} {active['name']}</blockquote>\n\n{base}"
+        text += f"\n🔥 Активная: {emoji} {active['name']}"
     else:
-        text = f"🔥 АКТИВНАЯ КАРТОЧКА\n<blockquote>нет</blockquote>\n\n{base}"
+        text += "\n🔥 Активная: нет"
 
-    if active and active["file_id"]:
-        await msg.answer_photo(active["file_id"], caption=text, parse_mode="HTML")
-    else:
-        await msg.answer(text, parse_mode="HTML")
+    await msg.answer(text)
 
 # ---------------- BONUS ----------------
 
@@ -144,46 +125,26 @@ async def bonus(msg: Message):
 
 # ---------------- CARD ----------------
 
-def roll_rarity():
-    r = random.uniform(0, 100)
-    s = 0
-    for name, chance in RARITY_CHANCE:
-        s += chance
-        if r <= s:
-            return name
-    return "common"
-
 @dp.message(F.text == "🎴 карта")
 async def card(msg: Message):
     u = get_user(msg.from_user.id)
 
-    if time.time() < u["cooldowns"]["card"]:
-        return await msg.answer("⏳ подожди 4 часа")
-
-    rarity = roll_rarity()
     card_id = random.choice(list(cards.keys()))
     card = cards[card_id]
 
-    coins = random.randint(*RARITY_COINS[rarity])
-
     u["cards"].append(card_id)
     u["fragments"] += 1
-    u["coins"] += coins
-    u["cooldowns"]["card"] = time.time() + 14400
 
     if not u["active_card"]:
         u["active_card"] = card_id
 
-    emoji = RARITY_EMOJI.get(rarity, "⚪")
+    emoji = RARITY_EMOJI[card["rarity"]]
 
-    text = f"🎴 НОВАЯ КАРТА\n\n{emoji} {card['name']}\n\n💰 +{coins} 🪙"
+    text = f"🎴 Новая карта\n{emoji} {card['name']}"
 
-    if card["file_id"]:
-        await msg.answer_photo(card["file_id"], caption=text)
-    else:
-        await msg.answer(text)
+    await msg.answer(text)
 
-# ---------------- VIEW ----------------
+# ---------------- VIEW (FIXED) ----------------
 
 @dp.message(F.text == "👁 просмотр")
 async def view_start(msg: Message):
@@ -194,7 +155,11 @@ async def show_view(event):
     uid = event.from_user.id
     index = view_index.get(uid, 0)
 
-    all_cards = list(cards.items())
+    # ✅ ВАЖНЫЙ ФИКС: ВСЕ КАРТЫ + СОРТИРОВКА
+    all_cards = sorted(
+        cards.items(),
+        key=lambda x: RARITY_ORDER.index(x[1]["rarity"])
+    )
 
     if not all_cards:
         return await event.answer("нет карточек")
@@ -208,14 +173,13 @@ async def show_view(event):
 
     cid, c = all_cards[index]
 
-    emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
+    emoji = RARITY_EMOJI[c["rarity"]]
 
     text = f"""
 🎴 КАРТОЧКА
 
 {emoji} {c['name']}
-
-📝 редкость: {c['rarity']}
+редкость: {c['rarity']}
 """
 
     nav = []
@@ -250,7 +214,7 @@ async def top(msg: Message):
 
     text = "🏆 ТОП\n\n"
     for i, (uid, u) in enumerate(top_list, 1):
-        text += f"{i}. {uid} - {u['coins']} 🪙\n"
+        text += f"{i}. {uid} — {u['coins']} 🪙\n"
 
     await msg.answer(text)
 
@@ -262,28 +226,14 @@ async def admin(msg: Message):
         return
 
     text = "🛠 КАРТОЧКИ\n\n"
+
     kb = []
 
     for cid, c in cards.items():
-        emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
+        emoji = RARITY_EMOJI[c["rarity"]]
         text += f"{cid}. {emoji} {c['name']}\n"
-        kb.append([InlineKeyboardButton(text=c["name"], callback_data=f"adm_{cid}")])
 
-    await msg.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data.startswith("adm_"))
-async def adm(c: CallbackQuery, state: FSMContext):
-    cid = int(c.data.split("_")[1])
-    selected_admin_card[c.from_user.id] = cid
-    await state.set_state(AdminState.waiting_photo)
-    await c.message.answer("отправь фото")
-
-@dp.message(AdminState.waiting_photo, F.photo)
-async def save_photo(m: Message, state: FSMContext):
-    cid = selected_admin_card.get(m.from_user.id)
-    cards[cid]["file_id"] = m.photo[-1].file_id
-    await m.answer("сохранено")
-    await state.clear()
+    await msg.answer(text)
 
 # ---------------- RUN ----------------
 
