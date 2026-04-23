@@ -8,7 +8,6 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from config import BOT_TOKEN
 from db import connect, create_tables
 
-# handlers
 from handlers import (
     profile,
     card,
@@ -26,7 +25,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # =========================
-# 📌 HANDLERS
+# 📦 HANDLERS
 # =========================
 dp.include_router(profile.router)
 dp.include_router(card.router)
@@ -38,7 +37,7 @@ dp.include_router(water.router)
 dp.include_router(help_handler.router)
 
 # =========================
-# 💬 START (ЛС)
+# 💬 START
 # =========================
 @dp.message(CommandStart())
 async def start(message: Message):
@@ -52,24 +51,24 @@ async def start(message: Message):
         resize_keyboard=True
     )
 
-    await message.answer("👋 Добро пожаловать в CardBot!", reply_markup=kb)
+    await message.answer("👋 Добро пожаловать!", reply_markup=kb)
 
 # =========================
-# 🚀 MAIN
+# 🚀 START BOT
 # =========================
 async def main():
     print("🚀 BOT STARTING...")
 
     if not BOT_TOKEN:
-        print("❌ BOT_TOKEN is empty")
+        print("❌ BOT_TOKEN EMPTY")
         return
 
-    await connect()
-    await create_tables()
+    await connect()          # 🔴 ВАЖНО: СНАЧАЛА DB
+    await create_tables()    # 🔴 ПОТОМ ТАБЛИЦЫ
 
     await bot.delete_webhook(drop_pending_updates=True)
 
-    print("🔥 BOT IS RUNNING")
+    print("🔥 BOT RUNNING")
 
     await dp.start_polling(bot)
 
