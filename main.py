@@ -48,13 +48,11 @@ RARITY_COINS = {
     "mythic": (300, 600),
 }
 
-# ---------------- INVENTORY STATE ----------------
+# ---------------- STATE ----------------
 
 user_inv_page = {}
 user_inv_rarity = {}
 selected_card_inv = {}
-
-# ---------------- ADMIN STATE ----------------
 
 class AdminState(StatesGroup):
     choosing_card = State()
@@ -62,7 +60,7 @@ class AdminState(StatesGroup):
 
 selected_admin_card = {}
 
-# ---------------- UI ----------------
+# ---------------- MENU ----------------
 
 menu = ReplyKeyboardMarkup(
     keyboard=[
@@ -82,7 +80,7 @@ def get_user(uid):
     if uid not in users:
         users[uid] = {
             "coins": 100,
-            "cards": [],  # теперь ХРАНИМ ID
+            "cards": [],
             "fragments": 0,
             "premium": False,
             "active_card": None,
@@ -97,12 +95,11 @@ async def start(msg: Message):
     get_user(msg.from_user.id)
     await msg.answer("👤 профиль создан", reply_markup=menu)
 
-# ---------------- PROFILE ----------------
+# ---------------- PROFILE (RICH) ----------------
 
 @dp.message(F.text == "👤 профиль")
 async def profile(msg: Message):
     u = get_user(msg.from_user.id)
-
     active = cards.get(u.get("active_card"))
 
     text = f"""
@@ -114,16 +111,26 @@ async def profile(msg: Message):
 
 🪙 Баланс • {u['coins']}
 🧩 Фрагменты • {u['fragments']}
-🎴 Карточки • {len(u['cards'])}
+🎴 Карточек • {len(u['cards'])}
 """
 
-    if active and active["file_id"]:
-        await msg.answer_photo(
-            active["file_id"],
-            caption=text + f"\nАктивная: {active['name']}"
-        )
+    if active:
+        text = f"""⭐ АКТИВНАЯ КАРТОЧКА
+
+🎴 {active['name']}
+⭐ {active['rarity']}
+
+────────────────
+
+{text}
+"""
+
+        if active["file_id"]:
+            await msg.answer_photo(active["file_id"], caption=text)
+        else:
+            await msg.answer(text)
     else:
-        await msg.answer(text + "\nАктивная: нет")
+        await msg.answer(text + "\n🎴 Активная: нет")
 
 # ---------------- BONUS ----------------
 
@@ -140,7 +147,7 @@ async def bonus(msg: Message):
 
     await msg.answer(f"🎁 +{reward} 🪙")
 
-# ---------------- CARD ----------------
+# ---------------- CARD GACHA ----------------
 
 def roll_rarity():
     r = random.uniform(0, 100)
@@ -150,10 +157,6 @@ def roll_rarity():
         if r <= s:
             return name
     return "common"
-
-def get_card_by_rarity(rarity):
-    pool = [c for c in cards.values() if c["rarity"] == rarity]
-    return random.choice(pool) if pool else None
 
 @dp.message(F.text == "🎴 карта")
 async def card(msg: Message):
@@ -173,27 +176,34 @@ async def card(msg: Message):
     u["coins"] += coins
     u["cooldowns"]["card"] = time.time() + 14400
 
-    # авто-активная
     if not u["active_card"]:
         u["active_card"] = card_id
 
+    text = f"""
+🎴 НОВАЯ КАРТА
+
+🎴 {card['name']}
+⭐ {rarity}
+
+💰 +{coins}
+🧩 +1
+"""
+
     if card["file_id"]:
-        await msg.answer_photo(card["file_id"], caption=card["name"])
+        await msg.answer_photo(card["file_id"], caption=text)
     else:
-        await msg.answer(card["name"])
+        await msg.answer(text)
 
 # ---------------- INVENTORY ----------------
 
 def get_cards_by_rarity(uid, rarity):
     u = get_user(uid)
-    result = []
-
+    res = []
     for cid in u["cards"]:
-        card = cards.get(cid)
-        if card and card["rarity"] == rarity:
-            result.append({"id": cid, **card})
-
-    return result
+        c = cards.get(cid)
+        if c and c["rarity"] == rarity:
+            res.append({"id": cid, **c})
+    return res
 
 @dp.message(F.text == "🎒 инвентарь")
 async def inventory(msg: Message):
@@ -214,15 +224,15 @@ async def inventory(msg: Message):
 
 @dp.callback_query(F.data.startswith("r_"))
 async def rarity(call: CallbackQuery):
-    rarity = call.data.split("_")[1]
-
-    user_inv_rarity[call.from_user.id] = rarity
+    r = call.data.split("_")[1]
+    user_inv_rarity[call.from_user.id] = r
     user_inv_page[call.from_user.id] = 0
-
     await show_inventory(call)
 
 async def show_inventory(call: CallbackQuery):
     uid = call.from_user.id
+    u = get_user(uid)
+
     rarity = user_inv_rarity.get(uid, "common")
     page = user_inv_page.get(uid, 0)
 
@@ -232,7 +242,12 @@ async def show_inventory(call: CallbackQuery):
     end = start + 5
     page_items = items[start:end]
 
-    text = f"🎒 {rarity.upper()} (стр {page+1})\n\n"
+    active = cards.get(u.get("active_card"))
+
+    text = f"🎒 {rarity.upper()}\n\n"
+
+    if active:
+        text += f"⭐ АКТИВНАЯ: {active['name']}\n\n"
 
     kb = []
 
@@ -254,50 +269,67 @@ async def show_inventory(call: CallbackQuery):
     await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data == "inv_next")
-async def next(call: CallbackQuery):
-    uid = call.from_user.id
-    user_inv_page[uid] = user_inv_page.get(uid, 0) + 1
-    await show_inventory(call)
+async def nxt(c: CallbackQuery):
+    user_inv_page[c.from_user.id] = user_inv_page.get(c.from_user.id, 0) + 1
+    await show_inventory(c)
 
 @dp.callback_query(F.data == "inv_prev")
-async def prev(call: CallbackQuery):
-    uid = call.from_user.id
-    user_inv_page[uid] = max(0, user_inv_page.get(uid, 0) - 1)
-    await show_inventory(call)
+async def prv(c: CallbackQuery):
+    user_inv_page[c.from_user.id] = max(0, user_inv_page.get(c.from_user.id, 0) - 1)
+    await show_inventory(c)
 
 @dp.callback_query(F.data == "inv_back")
-async def back(call: CallbackQuery):
-    await inventory(call.message)
+async def back(c: CallbackQuery):
+    await inventory(c.message)
 
 # ---------------- SELECT CARD ----------------
 
 @dp.callback_query(F.data.startswith("card_"))
-async def select_card(call: CallbackQuery):
-    cid = int(call.data.split("_")[1])
-    uid = call.from_user.id
+async def select(c: CallbackQuery):
+    cid = int(c.data.split("_")[1])
+    selected_card_inv[c.from_user.id] = cid
 
-    selected_card_inv[uid] = cid
+    card = cards[cid]
+
+    text = f"""
+🎴 КАРТА
+
+🎴 {card['name']}
+⭐ {card['rarity']}
+"""
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐", callback_data="set_active")],
+        [InlineKeyboardButton(text="⭐ сделать активной", callback_data="set_active")]
     ])
 
-    await call.message.answer(f"🎴 {cards[cid]['name']}", reply_markup=kb)
+    if card["file_id"]:
+        await c.message.answer_photo(card["file_id"], caption=text, reply_markup=kb)
+    else:
+        await c.message.answer(text, reply_markup=kb)
 
 @dp.callback_query(F.data == "set_active")
-async def set_active(call: CallbackQuery):
-    uid = call.from_user.id
+async def set_active(c: CallbackQuery):
+    uid = c.from_user.id
     cid = selected_card_inv.get(uid)
 
-    if not cid:
-        return await call.answer("нет карты")
+    if cid:
+        get_user(uid)["active_card"] = cid
+        await c.answer("установлено")
 
-    u = get_user(uid)
-    u["active_card"] = cid
+# ---------------- TOP ----------------
 
-    await call.answer("установлено")
+@dp.message(F.text == "🏆 топ")
+async def top(msg: Message):
+    top_bal = sorted(users.items(), key=lambda x: x[1]["coins"], reverse=True)[:10]
 
-# ---------------- ADMIN PHOTO ----------------
+    text = "🏆 ТОП\n\n🪙 Баланс:\n"
+
+    for i, (uid, u) in enumerate(top_bal, 1):
+        text += f"{i}. {uid} - {u['coins']}\n"
+
+    await msg.answer(text)
+
+# ---------------- ADMIN ----------------
 
 @dp.message(F.text == "🛠 админ")
 async def admin(msg: Message, state: FSMContext):
@@ -309,29 +341,21 @@ async def admin(msg: Message, state: FSMContext):
         for cid, c in cards.items()
     ])
 
-    await msg.answer("выбери карточку", reply_markup=kb)
+    await msg.answer("выбери", reply_markup=kb)
     await state.set_state(AdminState.choosing_card)
 
 @dp.callback_query(F.data.startswith("adm_"))
-async def admin_select(call: CallbackQuery, state: FSMContext):
-    cid = int(call.data.split("_")[1])
-    selected_admin_card[call.from_user.id] = cid
-
+async def adm_select(c: CallbackQuery, state: FSMContext):
+    cid = int(c.data.split("_")[1])
+    selected_admin_card[c.from_user.id] = cid
     await state.set_state(AdminState.waiting_photo)
-    await call.message.answer(f"отправь фото: {cards[cid]['name']}")
+    await c.message.answer("отправь фото")
 
 @dp.message(AdminState.waiting_photo, F.photo)
-async def save_photo(msg: Message, state: FSMContext):
-    if msg.from_user.id not in ADMINS:
-        return
-
-    cid = selected_admin_card.get(msg.from_user.id)
-    if not cid:
-        return
-
-    cards[cid]["file_id"] = msg.photo[-1].file_id
-
-    await msg.answer(f"готово: {cards[cid]['name']}")
+async def save_photo(m: Message, state: FSMContext):
+    cid = selected_admin_card.get(m.from_user.id)
+    cards[cid]["file_id"] = m.photo[-1].file_id
+    await m.answer("сохранено")
     await state.clear()
 
 # ---------------- RUN ----------------
