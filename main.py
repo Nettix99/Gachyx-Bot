@@ -20,7 +20,7 @@ ADMINS = [8200958216]
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ---------------- DATA ----------------
+# ---------------- DATABASE ----------------
 
 users = {}
 
@@ -28,6 +28,19 @@ cards = {
     1: {"name": "Саконжи Урокодаки", "rarity": "common", "file_id": None},
     2: {"name": "Канао Цуюри", "rarity": "uncommon", "file_id": None},
     3: {"name": "Синобу Кочо", "rarity": "rare", "file_id": None},
+    4: {"name": "Незуко Камадо", "rarity": "epic", "file_id": None},
+    5: {"name": "Гию Тамиока", "rarity": "epic", "file_id": None},
+    6: {"name": "Тандзиро Камадо", "rarity": "legendary", "file_id": None},
+    7: {"name": "Кокушибо", "rarity": "mythic", "file_id": None},
+}
+
+RARITY_EMOJI = {
+    "common": "⚪",
+    "uncommon": "🟢",
+    "rare": "🔵",
+    "epic": "🟣",
+    "legendary": "🟡",
+    "mythic": "🔴",
 }
 
 RARITY_CHANCE = [
@@ -48,36 +61,32 @@ RARITY_COINS = {
     "mythic": (300, 600),
 }
 
-RARITY_EMOJI = {
-    "common": "⚪",
-    "uncommon": "🟢",
-    "rare": "🔵",
-    "epic": "🟣",
-    "legendary": "🟡",
-    "mythic": "🔴",
-}
+RARITY_ORDER = [
+    "common",
+    "uncommon",
+    "rare",
+    "epic",
+    "legendary",
+    "mythic"
+]
 
 # ---------------- STATE ----------------
 
-user_inv_page = {}
-user_inv_rarity = {}
-selected_card_inv = {}
+catalog_page = {}
 selected_admin_card = {}
+selected_card_inv = {}
 
 class AdminState(StatesGroup):
-    choosing_card = State()
     waiting_photo = State()
 
 # ---------------- MENU ----------------
 
 menu = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="👤 профиль")],
-        [KeyboardButton(text="🎒 инвентарь")],
-        [KeyboardButton(text="🎴 карта")],
-        [KeyboardButton(text="🎁 бонус")],
-        [KeyboardButton(text="🏆 топ")],
-        [KeyboardButton(text="🛠 админ")],
+        [KeyboardButton(text="👤 профиль"), KeyboardButton(text="🎒 инвентарь")],
+        [KeyboardButton(text="🎴 карта"), KeyboardButton(text="🎁 бонус")],
+        [KeyboardButton(text="👁 просмотр"), KeyboardButton(text="🏆 топ")],
+        [KeyboardButton(text="🎴 коллекция"), KeyboardButton(text="🛠 админ")],
     ],
     resize_keyboard=True
 )
@@ -103,7 +112,7 @@ async def start(msg: Message):
     get_user(msg.from_user.id)
     await msg.answer("👤 профиль создан", reply_markup=menu)
 
-# ---------------- PROFILE (FIXED UI) ----------------
+# ---------------- PROFILE ----------------
 
 @dp.message(F.text == "👤 профиль")
 async def profile(msg: Message):
@@ -121,18 +130,9 @@ async def profile(msg: Message):
 
     if active:
         emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
-
-        text = (
-            "🔥 АКТИВНАЯ КАРТОЧКА\n"
-            f"<blockquote>{emoji} {active['name']}</blockquote>\n\n"
-            f"{base}"
-        )
+        text = f"🔥 АКТИВНАЯ КАРТОЧКА\n<blockquote>{emoji} {active['name']}</blockquote>\n\n{base}"
     else:
-        text = (
-            "🔥 АКТИВНАЯ КАРТОЧКА\n"
-            "<blockquote>нет</blockquote>\n\n"
-            f"{base}"
-        )
+        text = f"🔥 АКТИВНАЯ КАРТОЧКА\n<blockquote>нет</blockquote>\n\n{base}"
 
     if active and active["file_id"]:
         await msg.answer_photo(active["file_id"], caption=text, parse_mode="HTML")
@@ -154,7 +154,7 @@ async def bonus(msg: Message):
 
     await msg.answer(f"🎁 +{reward} 🪙")
 
-# ---------------- CARD SYSTEM ----------------
+# ---------------- CARD ----------------
 
 def roll_rarity():
     r = random.uniform(0, 100)
@@ -188,137 +188,84 @@ async def card(msg: Message):
 
     emoji = RARITY_EMOJI.get(rarity, "⚪")
 
-    text = (
-        "🎴 НОВАЯ КАРТА\n\n"
-        f"{emoji} {card['name']}\n\n"
-        f"💰 +{coins} 🪙\n"
-        f"🧩 +1"
-    )
+    text = f"🎴 НОВАЯ КАРТА\n\n{emoji} {card['name']}\n\n💰 +{coins} 🪙"
 
     if card["file_id"]:
         await msg.answer_photo(card["file_id"], caption=text)
     else:
         await msg.answer(text)
 
-# ---------------- INVENTORY ----------------
+# ---------------- VIEW ----------------
 
-@dp.message(F.text == "🎒 инвентарь")
-async def inventory(msg: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="⚪", callback_data="r_common"),
-            InlineKeyboardButton(text="🟢", callback_data="r_uncommon"),
-            InlineKeyboardButton(text="🔵", callback_data="r_rare"),
-        ],
-        [
-            InlineKeyboardButton(text="🟣", callback_data="r_epic"),
-            InlineKeyboardButton(text="🟡", callback_data="r_legendary"),
-            InlineKeyboardButton(text="🔴", callback_data="r_mythic"),
-        ],
-    ])
-
-    await msg.answer("🎒 выбери редкость", reply_markup=kb)
-
-@dp.callback_query(F.data.startswith("r_"))
-async def rarity(call: CallbackQuery):
-    r = call.data.split("_")[1]
-    user_inv_rarity[call.from_user.id] = r
-    user_inv_page[call.from_user.id] = 0
-    await show_inventory(call)
-
-def get_cards_by_rarity(uid, rarity):
-    u = get_user(uid)
-    res = []
-    for cid in u["cards"]:
-        c = cards.get(cid)
-        if c and c["rarity"] == rarity:
-            res.append({"id": cid, **c})
-    return res
-
-async def show_inventory(call: CallbackQuery):
-    uid = call.from_user.id
-    u = get_user(uid)
-
-    rarity = user_inv_rarity.get(uid, "common")
-    page = user_inv_page.get(uid, 0)
-
-    items = get_cards_by_rarity(uid, rarity)
-
-    start = page * 5
-    end = start + 5
-    page_items = items[start:end]
-
+@dp.message(F.text == "👁 просмотр")
+async def view(msg: Message):
+    u = get_user(msg.from_user.id)
     active = cards.get(u.get("active_card"))
 
-    text = f"🎒 {rarity.upper()}\n\n"
+    if not active:
+        return await msg.answer("нет активной карты")
 
-    if active:
-        emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
-        text += f"🔥 АКТИВНАЯ\n<blockquote>{emoji} {active['name']}</blockquote>\n\n"
+    emoji = RARITY_EMOJI.get(active["rarity"], "⚪")
+    text = f"👁 ВИТРИНА\n\n{emoji} {active['name']}"
+
+    if active["file_id"]:
+        await msg.answer_photo(active["file_id"], caption=text)
+    else:
+        await msg.answer(text)
+
+# ---------------- COLLECTION (CATALOG SLIDER) ----------------
+
+@dp.message(F.text == "🎴 коллекция")
+async def collection(msg: Message):
+    catalog_page[msg.from_user.id] = 0
+    await show_catalog(msg)
+
+async def show_catalog(event):
+    uid = event.from_user.id
+    page = catalog_page.get(uid, 0)
+
+    all_cards = list(cards.items())
+    all_cards.sort(key=lambda x: RARITY_ORDER.index(x[1]["rarity"]))
+
+    if page < 0:
+        page = 0
+    if page >= len(all_cards):
+        page = len(all_cards) - 1
+
+    catalog_page[uid] = page
+
+    cid, card = all_cards[page]
+
+    emoji = RARITY_EMOJI.get(card["rarity"], "⚪")
+
+    text = f"🎴 ВИТРИНА\n\n{emoji} {card['name']}"
 
     kb = []
 
-    for i, c in enumerate(page_items, 1):
-        emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
-        text += f"{i}️⃣ {emoji} {c['name']}\n"
-        kb.append([InlineKeyboardButton(text=f"{i}️⃣", callback_data=f"card_{c['id']}")])
-
     nav = []
-
     if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️", callback_data="inv_prev"))
-    if end < len(items):
-        nav.append(InlineKeyboardButton(text="➡️", callback_data="inv_next"))
-
-    nav.append(InlineKeyboardButton(text="🔙", callback_data="inv_back"))
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data="cat_prev"))
+    if page < len(all_cards) - 1:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data="cat_next"))
 
     kb.append(nav)
 
-    await call.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data == "inv_next")
-async def nxt(c: CallbackQuery):
-    user_inv_page[c.from_user.id] = user_inv_page.get(c.from_user.id, 0) + 1
-    await show_inventory(c)
-
-@dp.callback_query(F.data == "inv_prev")
-async def prv(c: CallbackQuery):
-    user_inv_page[c.from_user.id] = max(0, user_inv_page.get(c.from_user.id, 0) - 1)
-    await show_inventory(c)
-
-@dp.callback_query(F.data == "inv_back")
-async def back(c: CallbackQuery):
-    await inventory(c.message)
-
-# ---------------- SELECT CARD ----------------
-
-@dp.callback_query(F.data.startswith("card_"))
-async def select(c: CallbackQuery):
-    cid = int(c.data.split("_")[1])
-    selected_card_inv[c.from_user.id] = cid
-
-    card = cards[cid]
-    emoji = RARITY_EMOJI.get(card["rarity"], "⚪")
-
-    text = f"🎴 КАРТА\n\n{emoji} {card['name']}"
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ активировать", callback_data="set_active")]
-    ])
+    markup = InlineKeyboardMarkup(inline_keyboard=kb)
 
     if card["file_id"]:
-        await c.message.answer_photo(card["file_id"], caption=text, reply_markup=kb)
+        await event.answer_photo(card["file_id"], caption=text, reply_markup=markup)
     else:
-        await c.message.answer(text, reply_markup=kb)
+        await event.answer(text, reply_markup=markup)
 
-@dp.callback_query(F.data == "set_active")
-async def set_active(c: CallbackQuery):
-    uid = c.from_user.id
-    cid = selected_card_inv.get(uid)
+@dp.callback_query(F.data == "cat_next")
+async def next_c(c: CallbackQuery):
+    catalog_page[c.from_user.id] = catalog_page.get(c.from_user.id, 0) + 1
+    await show_catalog(c.message)
 
-    if cid:
-        get_user(uid)["active_card"] = cid
-        await c.answer("установлено")
+@dp.callback_query(F.data == "cat_prev")
+async def prev_c(c: CallbackQuery):
+    catalog_page[c.from_user.id] = max(0, catalog_page.get(c.from_user.id, 0) - 1)
+    await show_catalog(c.message)
 
 # ---------------- TOP ----------------
 
@@ -326,8 +273,7 @@ async def set_active(c: CallbackQuery):
 async def top(msg: Message):
     top_list = sorted(users.items(), key=lambda x: x[1]["coins"], reverse=True)[:10]
 
-    text = "🏆 ТОП\n\n🪙 Баланс:\n"
-
+    text = "🏆 ТОП\n\n"
     for i, (uid, u) in enumerate(top_list, 1):
         text += f"{i}. {uid} - {u['coins']} 🪙\n"
 
@@ -336,17 +282,19 @@ async def top(msg: Message):
 # ---------------- ADMIN ----------------
 
 @dp.message(F.text == "🛠 админ")
-async def admin(msg: Message, state: FSMContext):
+async def admin(msg: Message):
     if msg.from_user.id not in ADMINS:
         return
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=c["name"], callback_data=f"adm_{cid}")]
-        for cid, c in cards.items()
-    ])
+    text = "🛠 КАРТОЧКИ\n\n"
+    kb = []
 
-    await msg.answer("выбери карточку", reply_markup=kb)
-    await state.set_state(AdminState.choosing_card)
+    for cid, c in cards.items():
+        emoji = RARITY_EMOJI.get(c["rarity"], "⚪")
+        text += f"{cid}. {emoji} {c['name']}\n"
+        kb.append([InlineKeyboardButton(text=c["name"], callback_data=f"adm_{cid}")])
+
+    await msg.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data.startswith("adm_"))
 async def adm(c: CallbackQuery, state: FSMContext):
